@@ -32,7 +32,7 @@ def FixWay(way, nodes, username, password, server):
 	for nodeId in way[0]:
 		if nodeId not in nodes:
 			print "Get last known position of node",nodeId
-			lastKnown = GetLastKnownAttribs(nodeId)
+			lastKnown = GetLastKnownAttribs(nodeId, server)
 			print lastKnown
 			userpass = username+":"+password
 			if cid == 0:
@@ -115,13 +115,13 @@ def CheckFile(fiHandle, username, password, server):
 		CheckAndFixWay(int(way[2]['id']), username, password, server)	
 
 def CheckFilename(fina, username, password, server):
-	stub, ext = os.path.splitext(fullFiNa)
+	stub, ext = os.path.splitext(fina)
 	if ext == ".bz2":
-		print fullFiNa
-		CheckFile(bz2.BZ2File(di+"/"+fi), username, password, server)
+		print fina
+		CheckFile(bz2.BZ2File(fina), username, password, server)
 	if ext == ".osm":
-		print fullFiNa
-		CheckFile(open(di+"/"+fi, "rt"), username, password, server)
+		print fina
+		CheckFile(open(fina, "rt"), username, password, server)
 
 def WalkFiles(di, username, password, server):
 
@@ -190,7 +190,7 @@ if __name__=="__main__":
 			if not os.path.isfile(inp):
 				print "File not found:", inp
 				continue
-			CheckFile(open(inp, "rt"), username, password, server)
+			CheckFilename(inp, username, password, server)
 		if args.way:
 			wayId = int(inp)
 			CheckAndFixWay(wayId, username, password, server)
