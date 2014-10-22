@@ -77,7 +77,11 @@ def CheckAndFixWaysParsed(nodes, ways, username, password, server):
 def CheckAndFixWay(wayId, username, password, server):
 
 	print "Checking way",wayId
-	f = urllib2.urlopen(server+"/0.6/way/"+str(wayId)+"/full")
+	try:
+		f = urllib2.urlopen(server+"/0.6/way/"+str(wayId)+"/full")
+	except urllib2.HTTPError:
+		return 0
+
 	try:
 		root = ET.fromstring(f.read())
 	except ET.ParseError:
