@@ -114,6 +114,15 @@ def CheckFile(fiHandle, username, password, server):
 
 		CheckAndFixWay(int(way[2]['id']), username, password, server)	
 
+def CheckFilename(fina, username, password, server):
+	stub, ext = os.path.splitext(fullFiNa)
+	if ext == ".bz2":
+		print fullFiNa
+		CheckFile(bz2.BZ2File(di+"/"+fi), username, password, server)
+	if ext == ".osm":
+		print fullFiNa
+		CheckFile(open(di+"/"+fi, "rt"), username, password, server)
+
 def WalkFiles(di, username, password, server):
 
 	for fi in os.listdir(di):
@@ -121,13 +130,7 @@ def WalkFiles(di, username, password, server):
 			WalkFiles(di+"/"+fi, username, password, server)
 		if os.path.isfile(di+"/"+fi):
 			fullFiNa = di+"/"+fi
-			stub, ext = os.path.splitext(fullFiNa)
-			if ext == ".bz2":
-				print fullFiNa
-				CheckFile(bz2.BZ2File(di+"/"+fi), username, password, server)
-			if ext == ".osm":
-				print fullFiNa
-				CheckFile(open(di+"/"+fi, "rt"), username, password, server)
+			CheckFilename(fullFiNa, username, password, server)
 
 if __name__=="__main__":
 
