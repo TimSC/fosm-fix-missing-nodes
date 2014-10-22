@@ -7,8 +7,8 @@ def WayIsComplete(way, nodes):
 			return 0
 	return 1
 
-def GetLastKnownAttribs(nodeId):
-	url = "http://fosm.org/api/0.6/node/"+str(nodeId)+"/history"
+def GetLastKnownAttribs(nodeId, server):
+	url = server+"/0.6/node/"+str(nodeId)+"/history"
 	f = urllib2.urlopen(url)
 	dataXml = f.read()
 	root = ET.fromstring(dataXml)
@@ -23,8 +23,7 @@ def GetLastKnownAttribs(nodeId):
 
 	return attribData
 
-def FixWay(way, nodes, username, password):
-	url = "http://fosm.org/api"
+def FixWay(way, nodes, username, password, server):
 	cid = 0
 	nodeMapping = {}
 	wayId = way[2]['id']
@@ -37,11 +36,11 @@ def FixWay(way, nodes, username, password):
 			print lastKnown
 			userpass = username+":"+password
 			if cid == 0:
-				cidRet = osmmod.CreateChangeSet(userpass, {'comment':"Fix way "+str(wayId)}, url, verbose=2)
+				cidRet = osmmod.CreateChangeSet(userpass, {'comment':"Fix way "+str(wayId)}, server, verbose=2)
 				cid = cidRet[0]
 				print "Created changeset", cid
 
-			ret = osmmod.CreateNode(userpass, cid, url, lastKnown['lat'], lastKnown['lon'], {}, 2)
+			ret = osmmod.CreateNode(userpass, cid, server, lastKnown['lat'], lastKnown['lon'], {}, 2)
 			print "Replacing node",nodeId,"with",ret
 
 			nodeMapping[nodeId] = ret[0]
@@ -60,11 +59,11 @@ def FixWay(way, nodes, username, password):
 		#Upload new way
 		assert cid != 0
 		print "Uploading fixed way"
-		osmmod.ModifiedWay(userpass, cid, url, way[0], way[1], wayId, way[2]['version'], verbose=2)
+		osmmod.ModifiedWay(userpass, cid, server, way[0], way[1], wayId, way[2]['version'], verbose=2)
 	
 	#Close changeset
 	if cid != 0:
-		osmmod.CloseChangeSet(userpass, cid, url)
+		osmmod.CloseChangeSet(userpass, cid, server)
 		print "Closed changeset", cid
 
 def CheckAndFixWaysParsed(nodes, ways, username, password):
@@ -75,10 +74,10 @@ def CheckAndFixWaysParsed(nodes, ways, username, password):
 		if not WayIsComplete(ways[wayId], nodes):
 			FixWay(ways[wayId], nodes, username, password)
 
-def CheckAndFixWay(wayId, username, password):
+def CheckAndFixWay(wayId, username, password, server):
 
 	print "Checking way",wayId
-	f = urllib2.urlopen("http://fosm.org/api/0.6/way/"+str(wayId)+"/full")
+	f = urllib2.urlopen(server+"/0.6/way/"+str(wayId)+"/full")
 	try:
 		root = ET.fromstring(f.read())
 	except ET.ParseError:
@@ -89,10 +88,10 @@ def CheckAndFixWay(wayId, username, password):
 	CheckAndFixWaysParsed(nodes, ways, username, password)
 	return 1
 
-def CheckAndFixRelation(relationId, username, password):
+def CheckAndFixRelation(relationId, username, password, server):
 
 	print "Checking relation",relationId
-	f = urllib2.urlopen("http://fosm.org/api/0.6/relation/"+str(relationId)+"/full")
+	f = urllib2.urlopen(server+"/0.6/relation/"+str(relationId)+"/full")
 	try:
 		root = ET.fromstring(f.read())
 	except ET.ParseError:
@@ -103,7 +102,7 @@ def CheckAndFixRelation(relationId, username, password):
 	CheckAndFixWaysParsed(nodes, ways, username, password)
 	return 1
 
-def CheckFile(fiHandle, username, password):
+def CheckFile(fiHandle, username, password, server):
 	root = ET.fromstring(fiHandle.read())
 	nodes, ways, relations = osm.ParseOsmToObjs(root)
 
@@ -113,9 +112,9 @@ def CheckFile(fiHandle, username, password):
 		if WayIsComplete(way, nodes):
 			continue
 
-		CheckAndFixWay(int(way[2]['id']), username, password)	
+		CheckAndFixWay(int(way[2]['id']), username, password, server)	
 
-def WalkFiles(di, username, password):
+def WalkFiles(di, username, password, server):
 
 	for fi in os.listdir(di):
 		if os.path.isdir(di+"/"+fi):
@@ -125,10 +124,10 @@ def WalkFiles(di, username, password):
 			stub, ext = os.path.splitext(fullFiNa)
 			if ext == ".bz2":
 				print fullFiNa
-				CheckFile(bz2.BZ2File(di+"/"+fi), username, password)
+				CheckFile(bz2.BZ2File(di+"/"+fi), username, password, server)
 			if ext == ".osm":
 				print fullFiNa
-				CheckFile(open(di+"/"+fi, "rt"), username, password)
+				CheckFile(open(di+"/"+fi, "rt"), username, password, server)
 
 if __name__=="__main__":
 
@@ -142,6 +141,7 @@ if __name__=="__main__":
 	parser.add_argument('--path', action='store_true', help='Treat input as paths')
 
 	parser.add_argument('--cred', help='Path to credentials file')
+	parser.add_argument('--server', help='Server API URL')
 
 	args = parser.parse_args()
 
@@ -168,6 +168,10 @@ if __name__=="__main__":
 	if not args.path and not args.file and not args.relation:
 		args.way = True
 
+	server = "http://fosm.org/api"
+	if args.server:
+		server = args.server
+
 	if not args.cred:
 		username = raw_input("Username:")
 		password = raw_input("Password:")
@@ -183,15 +187,15 @@ if __name__=="__main__":
 			if not os.path.isfile(inp):
 				print "File not found:", inp
 				continue
-			CheckFile(open(inp, "rt"), username, password)
+			CheckFile(open(inp, "rt"), username, password, server)
 		if args.way:
 			wayId = int(inp)
-			CheckAndFixWay(wayId, username, password)
+			CheckAndFixWay(wayId, username, password, server)
 
 		if args.relation:
 			relationId = int(inp)
-			CheckAndFixRelation(relationId, username, password)
+			CheckAndFixRelation(relationId, username, password, server)
 
 		if args.path:
-			WalkFiles(inp, username, password)
+			WalkFiles(inp, username, password, server)
 
