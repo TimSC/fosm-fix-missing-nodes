@@ -118,7 +118,7 @@ def WalkFiles(di, username, password, server):
 
 	for fi in os.listdir(di):
 		if os.path.isdir(di+"/"+fi):
-			WalkFiles(di+"/"+fi, username, password)
+			WalkFiles(di+"/"+fi, username, password, server)
 		if os.path.isfile(di+"/"+fi):
 			fullFiNa = di+"/"+fi
 			stub, ext = os.path.splitext(fullFiNa)
