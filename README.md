@@ -5,13 +5,18 @@ Small python script to fix ways with missing nodes in the fosm database. Either 
 
 pycurl must be installed (I think)
 
-To fix a single way:
+Examples:
 
- python fixmissingnodes.py 55511190
+<pre>Check a way:      python fixmissingnodes.py 55511190
+Check a file:     python fixmissingnodes.py --file wiltboat.osm
+Check a relation: python fixmissingnodes.py --relation 20469
+Check many files: python fixmissingnodes.py --path /path/to/files</pre>
 
-To check all ways in a file:
+To check a way without being prompted for username and password:
 
- python fixmissingnodes.py wiltboat.osm
+<pre>python fixmissingnodes.py 55511190 --cred ~/Desktop/user.txt</pre>
+
+user.txt has username as first line and the password as the second line.
 
 Copying
 =======

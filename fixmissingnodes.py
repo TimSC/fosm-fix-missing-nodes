@@ -66,13 +66,13 @@ def FixWay(way, nodes, username, password, server):
 		osmmod.CloseChangeSet(userpass, cid, server)
 		print "Closed changeset", cid
 
-def CheckAndFixWaysParsed(nodes, ways, username, password):
+def CheckAndFixWaysParsed(nodes, ways, username, password, server):
 
 	for wayId in ways:
 		if not WayIsComplete(ways[wayId], nodes):
 			print wayId,"is incomplete"
 		if not WayIsComplete(ways[wayId], nodes):
-			FixWay(ways[wayId], nodes, username, password)
+			FixWay(ways[wayId], nodes, username, password, server)
 
 def CheckAndFixWay(wayId, username, password, server):
 
@@ -85,7 +85,7 @@ def CheckAndFixWay(wayId, username, password, server):
 		return 0
 	nodes, ways, relations = osm.ParseOsmToObjs(root)
 
-	CheckAndFixWaysParsed(nodes, ways, username, password)
+	CheckAndFixWaysParsed(nodes, ways, username, password, server)
 	return 1
 
 def CheckAndFixRelation(relationId, username, password, server):
@@ -99,7 +99,7 @@ def CheckAndFixRelation(relationId, username, password, server):
 		return 0
 	nodes, ways, relations = osm.ParseOsmToObjs(root)
 
-	CheckAndFixWaysParsed(nodes, ways, username, password)
+	CheckAndFixWaysParsed(nodes, ways, username, password, server)
 	return 1
 
 def CheckFile(fiHandle, username, password, server):
