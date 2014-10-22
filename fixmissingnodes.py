@@ -89,6 +89,20 @@ def CheckAndFixWay(wayId, username, password):
 	CheckAndFixWaysParsed(nodes, ways, username, password)
 	return 1
 
+def CheckAndFixRelation(relationId, username, password):
+
+	print "Checking relation",relationId
+	f = urllib2.urlopen("http://fosm.org/api/0.6/relation/"+str(relationId)+"/full")
+	try:
+		root = ET.fromstring(f.read())
+	except ET.ParseError:
+		print "Error: Invalid XML"
+		return 0
+	nodes, ways, relations = osm.ParseOsmToObjs(root)
+
+	CheckAndFixWaysParsed(nodes, ways, username, password)
+	return 1
+
 def CheckFile(fiHandle, username, password):
 	root = ET.fromstring(fiHandle.read())
 	nodes, ways, relations = osm.ParseOsmToObjs(root)
@@ -123,6 +137,7 @@ if __name__=="__main__":
 		               help='inputs to process')
 	parser.add_argument('--help', action='store_true', help='Print help message')
 	parser.add_argument('--way', action='store_true', help='Treat input as way ids (default)')
+	parser.add_argument('--relation', action='store_true', help='Treat input as relation ids')
 	parser.add_argument('--file', action='store_true', help='Treat input as files')
 	parser.add_argument('--path', action='store_true', help='Treat input as paths')
 
@@ -134,19 +149,23 @@ if __name__=="__main__":
 		parser.print_help()
 		exit(0)
 
-	if args.way and (args.file or args.path):
+	if args.way and (args.file or args.path or args.relation):
 		print "Only one input type may be specified"
 		exit(0)
 
-	if args.file and (args.way or args.path):
+	if args.file and (args.way or args.path or args.relation):
 		print "Only one input type may be specified"
 		exit(0)
 
-	if args.path and (args.way or args.file):
+	if args.path and (args.way or args.file or args.relation):
 		print "Only one input type may be specified"
 		exit(0)
 
-	if not args.path and not args.file:
+	if args.relation and (args.path or args.way or args.file):
+		print "Only one input type may be specified"
+		exit(0)
+
+	if not args.path and not args.file and not args.relation:
 		args.way = True
 
 	if not args.cred:
@@ -168,6 +187,11 @@ if __name__=="__main__":
 		if args.way:
 			wayId = int(inp)
 			CheckAndFixWay(wayId, username, password)
+
+		if args.relation:
+			relationId = int(inp)
+			CheckAndFixRelation(relationId, username, password)
+
 		if args.path:
 			WalkFiles(inp, username, password)
 
