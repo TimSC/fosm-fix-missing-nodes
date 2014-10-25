@@ -34,16 +34,20 @@ def FixWay(way, nodes, username, password, server):
 			print "Get last known position of node",nodeId
 			lastKnown = GetLastKnownAttribs(nodeId, server)
 			print lastKnown
+
 			userpass = username+":"+password
 			if cid == 0:
 				cidRet = osmmod.CreateChangeSet(userpass, {'comment':"Fix way "+str(wayId)}, server, verbose=2)
 				cid = cidRet[0]
 				print "Created changeset", cid
 
-			ret = osmmod.CreateNode(userpass, cid, server, lastKnown['lat'], lastKnown['lon'], {}, 2)
-			print "Replacing node",nodeId,"with",ret
+			if lastKnown is not None:
+				ret = osmmod.CreateNode(userpass, cid, server, lastKnown['lat'], lastKnown['lon'], {}, 2)
+				print "Replacing node",nodeId,"with",ret
 
-			nodeMapping[nodeId] = ret[0]
+				nodeMapping[nodeId] = ret[0]
+			else:
+				nodeMapping[nodeId] = None
 
 	if len(nodeMapping) > 0:
 
@@ -51,7 +55,8 @@ def FixWay(way, nodes, username, password, server):
 		filteredNds = []
 		for nodeId in way[0]:
 			if nodeId in nodeMapping:
-				filteredNds.append(nodeMapping[nodeId])
+				if nodeMapping[nodeId] is not None:
+					filteredNds.append(nodeMapping[nodeId])
 			else:
 				filteredNds.append(nodeId)
 		way[0] = filteredNds
