@@ -79,8 +79,10 @@ def CheckAndFixWay(wayId, username, password, server):
 	print "Checking way",wayId
 	try:
 		f = urllib2.urlopen(server+"/0.6/way/"+str(wayId)+"/full")
-	except urllib2.HTTPError:
-		return 0
+	except urllib2.HTTPError as err:
+		if str(err) == "HTTP Error 410: Gone":
+			return 0
+		raise err
 
 	try:
 		root = ET.fromstring(f.read())
