@@ -9,8 +9,8 @@ def WayIsComplete(way, nodes):
 			return 0
 	return 1
 
-def GetLastKnownAttribs(nodeId, server):
-	url = server+"/0.6/node/"+str(nodeId)+"/history"
+def GetLastKnownAttribs(nodeId, osmMod):
+	url = osmMod.baseurl+"/0.6/node/"+str(nodeId)+"/history"
 	r = requests.get(url)
 	root = ET.fromstring(r.content)
 	attribData = None
@@ -24,7 +24,7 @@ def GetLastKnownAttribs(nodeId, server):
 
 	return attribData
 
-def FixWay(way, nodes, username, password, server):
+def FixWay(way, nodes, osmMod):
 	cid = 0
 	nodeMapping = {}
 	wayId = way[2]['id']
@@ -33,17 +33,16 @@ def FixWay(way, nodes, username, password, server):
 	for nodeId in way[0]:
 		if nodeId not in nodes:
 			print ("Get last known position of node",nodeId)
-			lastKnown = GetLastKnownAttribs(nodeId, server)
+			lastKnown = GetLastKnownAttribs(nodeId, osmMod)
 			print (lastKnown)
 
-			userpass = username+":"+password
 			if cid == 0:
-				cidRet = osmmod.CreateChangeSet(userpass, {'comment':"Fix way "+str(wayId)}, server, verbose=2)
+				cidRet = osmMod.CreateChangeSet({'comment':"Fix way "+str(wayId)})
 				cid = cidRet[0]
 				print ("Created changeset", cid)
 
 			if lastKnown is not None:
-				ret = osmmod.CreateNode(userpass, cid, server, lastKnown['lat'], lastKnown['lon'], {}, 2)
+				ret = osmMod.CreateNode(cid, lastKnown['lat'], lastKnown['lon'], {}, 2)
 				print ("Replacing node",nodeId,"with",ret)
 
 				nodeMapping[nodeId] = ret[0]
@@ -65,26 +64,26 @@ def FixWay(way, nodes, username, password, server):
 		#Upload new way
 		assert cid != 0
 		print ("Uploading fixed way")
-		osmmod.ModifiedWay(userpass, cid, server, way[0], way[1], wayId, way[2]['version'], verbose=2)
+		osmMod.ModifiedWay(cid, way[0], way[1], wayId, way[2]['version'])
 	
 	#Close changeset
 	if cid != 0:
-		osmmod.CloseChangeSet(userpass, cid, server)
+		osmMod.CloseChangeSet(cid)
 		print ("Closed changeset", cid)
 
-def CheckAndFixWaysParsed(nodes, ways, username, password, server):
+def CheckAndFixWaysParsed(nodes, ways, osmMod):
 
 	for wayId in ways:
 		if not WayIsComplete(ways[wayId], nodes):
 			print (wayId,"is incomplete")
 		if not WayIsComplete(ways[wayId], nodes):
-			FixWay(ways[wayId], nodes, username, password, server)
+			FixWay(ways[wayId], nodes, osmMod)
 
-def CheckAndFixWay(wayId, username, password, server):
+def CheckAndFixWay(wayId, osmMod):
 
 	print ("Checking way",wayId)
 
-	r = requests.get(server+"/0.6/way/"+str(wayId)+"/full")
+	r = requests.get(osmMod.baseurl+"/0.6/way/"+str(wayId)+"/full")
 	if r.status_code != 200:
 		if r.status_code == 410:
 			return 0
@@ -97,13 +96,13 @@ def CheckAndFixWay(wayId, username, password, server):
 		return 0
 	nodes, ways, relations = osm.ParseOsmToObjs(root)
 
-	CheckAndFixWaysParsed(nodes, ways, username, password, server)
+	CheckAndFixWaysParsed(nodes, ways, osmMod)
 	return 1
 
-def CheckAndFixRelation(relationId, username, password, server):
+def CheckAndFixRelation(relationId, osmMod):
 
 	print ("Checking relation",relationId)
-	r = requests.get(server+"/0.6/relation/"+str(relationId)+"/full")
+	r = requests.get(osmMod.baseurl+"/0.6/relation/"+str(relationId)+"/full")
 
 	try:
 		root = ET.fromstring(f.content)
@@ -112,10 +111,10 @@ def CheckAndFixRelation(relationId, username, password, server):
 		return 0
 	nodes, ways, relations = osm.ParseOsmToObjs(root)
 
-	CheckAndFixWaysParsed(nodes, ways, username, password, server)
+	CheckAndFixWaysParsed(nodes, ways, osmMod)
 	return 1
 
-def CheckFile(fiHandle, username, password, server):
+def CheckFile(fiHandle, osmMod):
 	root = ET.fromstring(fiHandle.read())
 	nodes, ways, relations = osm.ParseOsmToObjs(root)
 
@@ -125,25 +124,25 @@ def CheckFile(fiHandle, username, password, server):
 		if WayIsComplete(way, nodes):
 			continue
 
-		CheckAndFixWay(int(way[2]['id']), username, password, server)	
+		CheckAndFixWay(int(way[2]['id']), osmMod)	
 
-def CheckFilename(fina, username, password, server):
+def CheckFilename(fina, osmMod):
 	stub, ext = os.path.splitext(fina)
 	if ext == ".bz2":
 		print (fina)
-		CheckFile(bz2.BZ2File(fina), username, password, server)
+		CheckFile(bz2.BZ2File(fina), osmMod)
 	if ext == ".osm":
 		print (fina)
-		CheckFile(open(fina, "rt"), username, password, server)
+		CheckFile(open(fina, "rt"), osmMod)
 
-def WalkFiles(di, username, password, server):
+def WalkFiles(di, osmMod):
 
 	for fi in os.listdir(di):
 		if os.path.isdir(di+"/"+fi):
-			WalkFiles(di+"/"+fi, username, password, server)
+			WalkFiles(di+"/"+fi, osmMod)
 		if os.path.isfile(di+"/"+fi):
 			fullFiNa = di+"/"+fi
-			CheckFilename(fullFiNa, username, password, server)
+			CheckFilename(fullFiNa, osmMod)
 
 if __name__=="__main__":
 
@@ -197,21 +196,23 @@ if __name__=="__main__":
 		username = userData[0]
 		password = userData[1]
 
+	osmMod = osmmod.OsmMod(server, username, password)
+
 	for inp in args.input:
 
 		if args.file:
 			if not os.path.isfile(inp):
 				print ("File not found:", inp)
 				continue
-			CheckFilename(inp, username, password, server)
+			CheckFilename(inp, osmMod)
 		if args.way:
 			wayId = int(inp)
-			CheckAndFixWay(wayId, username, password, server)
+			CheckAndFixWay(wayId, osmMod)
 
 		if args.relation:
 			relationId = int(inp)
-			CheckAndFixRelation(relationId, username, password, server)
+			CheckAndFixRelation(relationId, osmMod)
 
 		if args.path:
-			WalkFiles(inp, username, password, server)
+			WalkFiles(inp, osmMod)
 
