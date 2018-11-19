@@ -1,29 +1,33 @@
 import urlutil
+import argparse
+import requests
+from requests.auth import HTTPBasicAuth
 import xml.etree.ElementTree as ET
 import xml.sax.saxutils as saxutils
 
-def CreateChangeSet(userpass, tags, baseurl, verbose=0, exe=1):
+def CreateChangeSet(user, passw, tags, baseurl, verbose=0, exe=1):
 	#Create a changeset
-	createChangeset = "<?xml version='1.0' encoding='UTF-8'?>\n" +\
-	"<osm version='0.6' generator='py'>\n" +\
-	"  <changeset>\n"
+	createChangeset = u"<?xml version='1.0' encoding='UTF-8'?>\n" +\
+	u"<osm version='0.6' generator='py'>\n" +\
+	u"  <changeset>\n"
 	for k in tags:
-		createChangeset += '<tag k="{0}" v="{1}"/>\n'.format(saxutils.escape(k), saxutils.escape(tags[k])).encode('utf-8')
-	createChangeset += "  </changeset>\n" +\
-	"</osm>\n"
+		createChangeset += u'<tag k="{0}" v="{1}"/>\n'.format(saxutils.escape(k), saxutils.escape(tags[k]))
+	createChangeset += u"  </changeset>\n" +\
+	u"</osm>\n"
 
 	if verbose >= 2:
 		print createChangeset
 
 	if exe:
-		response = urlutil.Put(baseurl+"/0.6/changeset/create",createChangeset,userpass)
-		if verbose >= 1: print response
-		if len(response[0]) == 0:
-			print response
+		#response = urlutil.Put(baseurl+"/0.6/changeset/create",createChangeset,userpass)
+		r = requests.put(baseurl+"/0.6/changeset/create", data=createChangeset.encode('utf-8'), auth=HTTPBasicAuth(user, passw))
+
+		if verbose >= 1: print r.content
+		if len(r.content) == 0:
 			return (0,"Error creating changeset")
-		cid = int(response[0])
-		if urlutil.HeaderResponseCode(response[1]) != "HTTP/1.1 200 OK": 
-			print response
+		cid = int(r.content)
+		if r.status_code != 200: 
+			print r.content
 			return (0,"Error creating changeset")
 	else:
 		cid = 1001
@@ -132,14 +136,37 @@ def ModifiedWay(userpass, cid, baseurl, nodeIds, tags, wid, existingVersion, ver
 
 if __name__=="__main__":
 
+	parser = argparse.ArgumentParser(description='Fix broken ways.', add_help=False)
+
+	parser.add_argument('--help', action='store_true', help='Print help message')
+	parser.add_argument('--cred', help='Path to credentials file')
+	parser.add_argument('--server', help='Server API URL')
+
+	args = parser.parse_args()
+
+	if args.help:
+		parser.print_help()
+		exit(0)
+
 	#url = "http://api.openstreetmap.org/api"
-	url = "http://fosm.org/api"
+	#url = "http://fosm.org/api"
 	#url = "http://kinatomic/m/microcosm.php"
-	username = "mapping@sheerman-chase.org.uk" #raw_input("Username:")
-	password = raw_input("Password:")
+	url = "https://master.apis.dev.openstreetmap.org"
+	if args.server:
+		url = args.server
+
+	if not args.cred:
+		username = raw_input("Username:")
+		password = raw_input("Password:")
+	else:
+		userFile = open(args.cred,"rt").read()
+		userData = userFile.split("\n")
+		username = userData[0]
+		password = userData[1]
+
 	userpass = username+":"+password
 
-	cid, status = CreateChangeSet(userpass, {'comment':"Api Tests"}, url)
+	cid, status = CreateChangeSet(username, password, {'comment':"Api Tests"}, url)
 	print "Created changeset", cid
 	assert cid > 0
 

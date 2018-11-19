@@ -1,4 +1,4 @@
-import osm, bz2, urllib2, urlutil, osmmod, os, osmmod, sys, argparse
+import osm, bz2, urllib2, osmmod, os, osmmod, sys, argparse
 import xml.etree.ElementTree as ET
 
 def WayIsComplete(way, nodes):
