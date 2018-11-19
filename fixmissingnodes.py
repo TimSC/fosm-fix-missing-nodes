@@ -42,7 +42,7 @@ def FixWay(way, nodes, osmMod):
 				print ("Created changeset", cid)
 
 			if lastKnown is not None:
-				ret = osmMod.CreateNode(cid, lastKnown['lat'], lastKnown['lon'], {}, 2)
+				ret = osmMod.CreateNode(cid, lastKnown['lat'], lastKnown['lon'], {})
 				print ("Replacing node",nodeId,"with",ret)
 
 				nodeMapping[nodeId] = ret[0]
@@ -63,9 +63,13 @@ def FixWay(way, nodes, osmMod):
 
 		#Upload new way
 		assert cid != 0
-		print ("Uploading fixed way")
-		osmMod.ModifiedWay(cid, way[0], way[1], wayId, way[2]['version'])
-	
+		if len(way[0]) >= 2:
+			print ("Uploading fixed way")
+			osmMod.ModifiedWay(cid, way[0], way[1], wayId, way[2]['version'])
+		else:
+			print ("Deleting way with insufficient nodes")
+			osmMod.DeleteWay(cid, wayId, way[2]['version'])
+
 	#Close changeset
 	if cid != 0:
 		osmMod.CloseChangeSet(cid)

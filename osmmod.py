@@ -160,6 +160,29 @@ class OsmMod(object):
 
 		return int(newId), int(newVersion)
 
+	def DeleteWay(self, cid, wid, existingVersion):
+
+		xml = u"<?xml version='1.0' encoding='UTF-8'?>\n"
+		xml += u'<osmChange version="0.6" generator="py">\n<delete>\n<way id="{0}" changeset="{1}" version="{2}">\n'.format(wid, cid, existingVersion)
+		xml += u'</way>\n</delete>\n</osmChange>\n'
+		if self.verbose >= 2: print (xml)
+		newId = None
+		newVersion = None
+
+		if self.exe:
+			r = requests.post(self.baseurl+"/0.6/changeset/"+str(cid)+"/upload", data=xml.encode('utf-8'), 
+				auth=HTTPBasicAuth(self.user, self.passw),
+				headers=self.xmlHeaders)
+
+			if self.verbose >= 1: print (r.content)
+			if r.status_code != 200: return None
+
+			respRoot = ET.fromstring(r.content)
+			for obj in respRoot:
+				newVersion = obj.attrib['new_version']
+
+		return int(newVersion)
+
 if __name__=="__main__":
 
 	parser = argparse.ArgumentParser(description='Fix broken ways.', add_help=False)
