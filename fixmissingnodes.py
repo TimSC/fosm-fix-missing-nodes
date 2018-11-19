@@ -1,4 +1,6 @@
-import osm, bz2, urllib2, osmmod, os, osmmod, sys, argparse
+from __future__ import print_function
+from __future__ import unicode_literals
+import osm, bz2, requests, osmmod, os, sys, argparse
 import xml.etree.ElementTree as ET
 
 def WayIsComplete(way, nodes):
@@ -9,9 +11,8 @@ def WayIsComplete(way, nodes):
 
 def GetLastKnownAttribs(nodeId, server):
 	url = server+"/0.6/node/"+str(nodeId)+"/history"
-	f = urllib2.urlopen(url)
-	dataXml = f.read()
-	root = ET.fromstring(dataXml)
+	r = requests.get(url)
+	root = ET.fromstring(r.content)
 	attribData = None
 	attribVer = None
 	
@@ -31,19 +32,19 @@ def FixWay(way, nodes, username, password, server):
 	#Create replacement nodes
 	for nodeId in way[0]:
 		if nodeId not in nodes:
-			print "Get last known position of node",nodeId
+			print ("Get last known position of node",nodeId)
 			lastKnown = GetLastKnownAttribs(nodeId, server)
-			print lastKnown
+			print (lastKnown)
 
 			userpass = username+":"+password
 			if cid == 0:
 				cidRet = osmmod.CreateChangeSet(userpass, {'comment':"Fix way "+str(wayId)}, server, verbose=2)
 				cid = cidRet[0]
-				print "Created changeset", cid
+				print ("Created changeset", cid)
 
 			if lastKnown is not None:
 				ret = osmmod.CreateNode(userpass, cid, server, lastKnown['lat'], lastKnown['lon'], {}, 2)
-				print "Replacing node",nodeId,"with",ret
+				print ("Replacing node",nodeId,"with",ret)
 
 				nodeMapping[nodeId] = ret[0]
 			else:
@@ -63,36 +64,36 @@ def FixWay(way, nodes, username, password, server):
 
 		#Upload new way
 		assert cid != 0
-		print "Uploading fixed way"
+		print ("Uploading fixed way")
 		osmmod.ModifiedWay(userpass, cid, server, way[0], way[1], wayId, way[2]['version'], verbose=2)
 	
 	#Close changeset
 	if cid != 0:
 		osmmod.CloseChangeSet(userpass, cid, server)
-		print "Closed changeset", cid
+		print ("Closed changeset", cid)
 
 def CheckAndFixWaysParsed(nodes, ways, username, password, server):
 
 	for wayId in ways:
 		if not WayIsComplete(ways[wayId], nodes):
-			print wayId,"is incomplete"
+			print (wayId,"is incomplete")
 		if not WayIsComplete(ways[wayId], nodes):
 			FixWay(ways[wayId], nodes, username, password, server)
 
 def CheckAndFixWay(wayId, username, password, server):
 
-	print "Checking way",wayId
-	try:
-		f = urllib2.urlopen(server+"/0.6/way/"+str(wayId)+"/full")
-	except urllib2.HTTPError as err:
-		if str(err) == "HTTP Error 410: Gone":
+	print ("Checking way",wayId)
+
+	r = requests.get(server+"/0.6/way/"+str(wayId)+"/full")
+	if r.status_code != 200:
+		if r.status_code == 410:
 			return 0
-		raise err
+		raise RuntimeError("Failed to get full way")
 
 	try:
-		root = ET.fromstring(f.read())
+		root = ET.fromstring(r.content)
 	except ET.ParseError:
-		print "Error: Invalid XML"
+		print ("Error: Invalid XML")
 		return 0
 	nodes, ways, relations = osm.ParseOsmToObjs(root)
 
@@ -101,12 +102,13 @@ def CheckAndFixWay(wayId, username, password, server):
 
 def CheckAndFixRelation(relationId, username, password, server):
 
-	print "Checking relation",relationId
-	f = urllib2.urlopen(server+"/0.6/relation/"+str(relationId)+"/full")
+	print ("Checking relation",relationId)
+	r = requests.get(server+"/0.6/relation/"+str(relationId)+"/full")
+
 	try:
-		root = ET.fromstring(f.read())
+		root = ET.fromstring(f.content)
 	except ET.ParseError:
-		print "Error: Invalid XML"
+		print ("Error: Invalid XML")
 		return 0
 	nodes, ways, relations = osm.ParseOsmToObjs(root)
 
@@ -128,10 +130,10 @@ def CheckFile(fiHandle, username, password, server):
 def CheckFilename(fina, username, password, server):
 	stub, ext = os.path.splitext(fina)
 	if ext == ".bz2":
-		print fina
+		print (fina)
 		CheckFile(bz2.BZ2File(fina), username, password, server)
 	if ext == ".osm":
-		print fina
+		print (fina)
 		CheckFile(open(fina, "rt"), username, password, server)
 
 def WalkFiles(di, username, password, server):
@@ -164,19 +166,19 @@ if __name__=="__main__":
 		exit(0)
 
 	if args.way and (args.file or args.path or args.relation):
-		print "Only one input type may be specified"
+		print ("Only one input type may be specified")
 		exit(0)
 
 	if args.file and (args.way or args.path or args.relation):
-		print "Only one input type may be specified"
+		print ("Only one input type may be specified")
 		exit(0)
 
 	if args.path and (args.way or args.file or args.relation):
-		print "Only one input type may be specified"
+		print ("Only one input type may be specified")
 		exit(0)
 
 	if args.relation and (args.path or args.way or args.file):
-		print "Only one input type may be specified"
+		print ("Only one input type may be specified")
 		exit(0)
 
 	if not args.path and not args.file and not args.relation:
@@ -199,7 +201,7 @@ if __name__=="__main__":
 
 		if args.file:
 			if not os.path.isfile(inp):
-				print "File not found:", inp
+				print ("File not found:", inp)
 				continue
 			CheckFilename(inp, username, password, server)
 		if args.way:
