@@ -67,8 +67,14 @@ def FixWay(way, nodes, osmMod):
 			print ("Uploading fixed way")
 			osmMod.ModifiedWay(cid, way[0], way[1], wayId, way[2]['version'])
 		else:
-			print ("Deleting way with insufficient nodes")
-			osmMod.DeleteWay(cid, wayId, way[2]['version'])
+			# Check if invalid way is member of a relation
+			parentRels = osmMod.GetObjectRelations('way', wayId)
+			if parentRels == 0:
+				print ("Deleting way with insufficient nodes")
+				osmMod.DeleteWay(cid, wayId, way[2]['version'])
+
+			else:
+				print ("Invalid way {} found as part of relation(s) {}".format(wayId, parentRels.keys()))
 
 	#Close changeset
 	if cid != 0:

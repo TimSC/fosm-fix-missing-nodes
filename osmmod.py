@@ -2,6 +2,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 import argparse
 import requests
+import osm
 from requests.auth import HTTPBasicAuth
 import xml.etree.ElementTree as ET
 import xml.sax.saxutils as saxutils
@@ -112,7 +113,7 @@ class OsmMod(object):
 			xml += u'<nd ref="{0}"/>\n'.format(nid)
 		for k in tags:
 			xml += u'<tag k="{0}" v="{1}"/>\n'.format(saxutils.escape(k), saxutils.escape(tags[k]))
-		xml += 'u</way>\n</create>\n</osmChange>\n'
+		xml += u'</way>\n</create>\n</osmChange>\n'
 		if self.verbose >= 2: print (xml)
 		newId = None
 		newVersion = None
@@ -183,6 +184,75 @@ class OsmMod(object):
 
 		return int(newVersion)
 
+	def CreateRelation(self, cid, members, tags):
+
+		xml = u"<?xml version='1.0' encoding='UTF-8'?>\n"
+		xml += u'<osmChange version="0.6" generator="py">\n<create>\n<relation id="-1" changeset="{0}">\n'.format(cid)
+		for memType, memId, memRole in members:
+			xml += u'<member type="{}" role="{}" ref="{}"/>\n'.format(memType, saxutils.escape(memRole), int(memId))
+		for k in tags:
+			xml += u'<tag k="{0}" v="{1}"/>\n'.format(saxutils.escape(k), saxutils.escape(tags[k]))
+		xml += u'</relation>\n</create>\n</osmChange>\n'
+
+		if self.verbose >= 2: print (xml)
+		newId = None
+		newVersion = None
+
+		if self.exe:
+			r = requests.post(self.baseurl+"/0.6/changeset/"+str(cid)+"/upload", data=xml.encode('utf-8'), 
+				auth=HTTPBasicAuth(self.user, self.passw),
+				headers=self.xmlHeaders)
+
+			if self.verbose >= 1: print (r.content)
+			if r.status_code != 200: return None
+
+			respRoot = ET.fromstring(r.content)
+			for obj in respRoot:
+				newId = obj.attrib['new_id']
+				newVersion = obj.attrib['new_version']
+
+		return int(newId), int(newVersion)
+	
+	def GetFullObject(self, objType, objId):
+		if objType not in ['way', 'relation']:
+			raise TypeError('Wrong type specified')
+		
+		r = requests.get("{}/0.6/{}/{}/full".format(self.baseurl, objType, int(objId)))
+
+		if self.verbose >= 1: print (r.content)
+		if r.status_code != 200: return None
+
+		root = ET.fromstring(r.content)
+		nodes, ways, relations = osm.ParseOsmToObjs(root)
+
+		return nodes, ways, relations
+
+	def GetFullObject(self, objType, objId):
+		if objType not in ['way', 'relation']:
+			raise TypeError('Wrong type specified')
+		
+		r = requests.get("{}/0.6/{}/{}/full".format(self.baseurl, objType, int(objId)))
+
+		if self.verbose >= 1: print (r.content)
+		if r.status_code != 200: return None
+
+		root = ET.fromstring(r.content)
+		nodes, ways, relations = osm.ParseOsmToObjs(root)
+
+		return nodes, ways, relations
+
+	def GetObjectRelations(self, objType, objId):
+		
+		r = requests.get("{}/0.6/{}/{}/relations".format(self.baseurl, objType, int(objId)))
+
+		if self.verbose >= 1: print (r.content)
+		if r.status_code != 200: return None
+
+		root = ET.fromstring(r.content)
+		nodes, ways, relations = osm.ParseOsmToObjs(root)
+
+		return relations
+
 if __name__=="__main__":
 
 	parser = argparse.ArgumentParser(description='Fix broken ways.', add_help=False)
@@ -235,6 +305,20 @@ if __name__=="__main__":
 	wayRet2 = osmMod.ModifiedWay(cid, [ndId, ndId2], {'testk':'val2'}, wayRet[0], wayRet[1])
 	print (wayRet2)
 
+	members = [('node', ndId, 'foo'), ('way', wayRet[0], 'bar')]
+	print ('node', ndId, 'foo')
+	print ('way', wayRet[0], 'bar')
+	print (members)
+	relRet = osmMod.CreateRelation(cid, members, {'eggs': 'spam'})
+	print (relRet)
+
 	osmMod.CloseChangeSet(cid)
 	print ("Closed changeset", cid)
+
+	nodes, ways, relations = osmMod.GetFullObject('way', wayRet[0])
+	print (nodes, ways, relations)
+
+	relations2 = osmMod.GetObjectRelations('way', wayRet[0])
+	print (relations2)
+	assert len(relations2) == 1
 
