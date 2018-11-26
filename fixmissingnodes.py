@@ -24,8 +24,20 @@ def GetLastKnownAttribs(nodeId, osmMod):
 
 	return attribData
 
-def FixWay(way, nodes, osmMod):
-	cid = 0
+def CheckAndOpenChangeset(osmMod, cid=[0]):
+	if cid[0] == 0:
+		cidRet = osmMod.CreateChangeSet({'comment':"Fix missing nodes in way (bot)"})
+		cid[0] = cidRet[0]
+		print ("Created changeset", cid[0])	
+
+def CloseChangeset(osm, cid):
+	#Close changeset
+	if cid[0] != 0:
+		osmMod.CloseChangeSet(cid[0])
+		print ("Closed changeset", cid[0])
+
+def FixWay(way, nodes, osmMod, cid=[0]):
+
 	nodeMapping = {}
 	wayId = way[2]['id']
 
@@ -36,13 +48,10 @@ def FixWay(way, nodes, osmMod):
 			lastKnown = GetLastKnownAttribs(nodeId, osmMod)
 			print (lastKnown)
 
-			if cid == 0:
-				cidRet = osmMod.CreateChangeSet({'comment':"Fix way "+str(wayId)})
-				cid = cidRet[0]
-				print ("Created changeset", cid)
-
 			if lastKnown is not None:
-				ret = osmMod.CreateNode(cid, lastKnown['lat'], lastKnown['lon'], {})
+				CheckAndOpenChangeset(osmMod, cid)
+
+				ret = osmMod.CreateNode(cid[0], lastKnown['lat'], lastKnown['lon'], {})
 				print ("Replacing node",nodeId,"with",ret)
 
 				nodeMapping[nodeId] = ret[0]
@@ -62,54 +71,44 @@ def FixWay(way, nodes, osmMod):
 		way[0] = filteredNds
 
 		#Upload new way
-		assert cid != 0
 		if len(way[0]) >= 2:
+			CheckAndOpenChangeset(osmMod, cid)
 			print ("Uploading fixed way")
-			osmMod.ModifiedWay(cid, way[0], way[1], wayId, way[2]['version'])
+			osmMod.ModifiedWay(cid[0], way[0], way[1], wayId, way[2]['version'])
 		else:
 			# Check if invalid way is member of a relation
 			parentRels = osmMod.GetObjectRelations('way', wayId)
-			if parentRels == 0:
+			if len(parentRels) == 0:
+
+				CheckAndOpenChangeset(osmMod, cid)
 				print ("Deleting way with insufficient nodes")
-				osmMod.DeleteWay(cid, wayId, way[2]['version'])
+				osmMod.DeleteWay(cid[0], wayId, way[2]['version'])
 
 			else:
 				print ("Invalid way {} found as part of relation(s) {}".format(wayId, parentRels.keys()))
 
-	#Close changeset
-	if cid != 0:
-		osmMod.CloseChangeSet(cid)
-		print ("Closed changeset", cid)
-
-def CheckAndFixWaysParsed(nodes, ways, osmMod):
+def CheckAndFixWaysParsed(nodes, ways, osmMod, cid=[0]):
 
 	for wayId in ways:
 		if not WayIsComplete(ways[wayId], nodes):
 			print (wayId,"is incomplete")
-		if not WayIsComplete(ways[wayId], nodes):
-			FixWay(ways[wayId], nodes, osmMod)
+			FixWay(ways[wayId], nodes, osmMod, cid)
 
-def CheckAndFixWay(wayId, osmMod):
+def CheckAndFixWay(wayId, osmMod, cid=[0]):
 
 	print ("Checking way",wayId)
 
-	r = requests.get(osmMod.baseurl+"/0.6/way/"+str(wayId)+"/full")
-	if r.status_code != 200:
-		if r.status_code == 410:
-			return 0
-		raise RuntimeError("Failed to get full way")
-
 	try:
-		root = ET.fromstring(r.content)
-	except ET.ParseError:
-		print ("Error: Invalid XML")
-		return 0
-	nodes, ways, relations = osm.ParseOsmToObjs(root)
+		nodes, ways, relations = osmMod.GetFullObject('way', wayId)
+	except osmmod.ApiError as err:
+		print (err)
+		return False
 
-	CheckAndFixWaysParsed(nodes, ways, osmMod)
-	return 1
+	CheckAndFixWaysParsed(nodes, ways, osmMod, cid)
 
-def CheckAndFixRelation(relationId, osmMod):
+	return True
+
+def CheckAndFixWaysInRelation(relationId, osmMod, cid=[0]):
 
 	print ("Checking relation",relationId)
 	r = requests.get(osmMod.baseurl+"/0.6/relation/"+str(relationId)+"/full")
@@ -121,10 +120,10 @@ def CheckAndFixRelation(relationId, osmMod):
 		return 0
 	nodes, ways, relations = osm.ParseOsmToObjs(root)
 
-	CheckAndFixWaysParsed(nodes, ways, osmMod)
+	CheckAndFixWaysParsed(nodes, ways, osmMod, cid)
 	return 1
 
-def CheckFile(fiHandle, osmMod):
+def CheckFile(fiHandle, osmMod, cid=[0]):
 	root = ET.fromstring(fiHandle.read())
 	nodes, ways, relations = osm.ParseOsmToObjs(root)
 
@@ -134,25 +133,25 @@ def CheckFile(fiHandle, osmMod):
 		if WayIsComplete(way, nodes):
 			continue
 
-		CheckAndFixWay(int(way[2]['id']), osmMod)	
+		CheckAndFixWay(int(way[2]['id']), osmMod, cid)	
 
-def CheckFilename(fina, osmMod):
+def CheckFilename(fina, osmMod, cid=[0]):
 	stub, ext = os.path.splitext(fina)
 	if ext == ".bz2":
 		print (fina)
 		CheckFile(bz2.BZ2File(fina), osmMod)
 	if ext == ".osm":
 		print (fina)
-		CheckFile(open(fina, "rt"), osmMod)
+		CheckFile(open(fina, "rt"), osmMod, cid)
 
-def WalkFiles(di, osmMod):
+def WalkFiles(di, osmMod, cid=[0]):
 
 	for fi in os.listdir(di):
 		if os.path.isdir(di+"/"+fi):
-			WalkFiles(di+"/"+fi, osmMod)
+			WalkFiles(di+"/"+fi, osmMod, cid)
 		if os.path.isfile(di+"/"+fi):
 			fullFiNa = di+"/"+fi
-			CheckFilename(fullFiNa, osmMod)
+			CheckFilename(fullFiNa, osmMod, cid)
 
 if __name__=="__main__":
 
@@ -206,6 +205,7 @@ if __name__=="__main__":
 		username = userData[0]
 		password = userData[1]
 
+	cid=[0]
 	osmMod = osmmod.OsmMod(server, username, password)
 
 	for inp in args.input:
@@ -214,15 +214,17 @@ if __name__=="__main__":
 			if not os.path.isfile(inp):
 				print ("File not found:", inp)
 				continue
-			CheckFilename(inp, osmMod)
+			CheckFilename(inp, osmMod, cid)
 		if args.way:
 			wayId = int(inp)
-			CheckAndFixWay(wayId, osmMod)
+			CheckAndFixWay(wayId, osmMod, cid)
 
 		if args.relation:
 			relationId = int(inp)
-			CheckAndFixRelation(relationId, osmMod)
+			CheckAndFixWaysInRelation(relationId, osmMod, cid)
 
 		if args.path:
-			WalkFiles(inp, osmMod)
+			WalkFiles(inp, osmMod, cid)
+
+	CloseChangeset(osmMod, cid)
 

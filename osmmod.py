@@ -7,6 +7,15 @@ from requests.auth import HTTPBasicAuth
 import xml.etree.ElementTree as ET
 import xml.sax.saxutils as saxutils
 
+class ApiError (RuntimeError):
+	def __init__(self,*args,**kwargs):
+		self.status_code = None
+		if 'status_code' in kwargs:
+			self.status_code = kwargs['status_code']
+		del kwargs['status_code']
+
+		RuntimeError.__init__(self, *args, **kwargs)
+
 class OsmMod(object):
 
 	def __init__(self, baseurl, user, passw):
@@ -105,6 +114,31 @@ class OsmMod(object):
 
 		return int(newVersion)
 
+
+	def DeleteObject(self, cid, objType, objId, existingVersion):
+
+		xml = u"<?xml version='1.0' encoding='UTF-8'?>\n"
+		xml += ((u'<osmChange version="0.6" generator="py">\n<delete>\n<{3} id="{0}" changeset="{1}" version="{2}">\n' +
+			u'</{3}>\n</delete>\n</osmChange>\n').
+			format(objId, cid, existingVersion, objType))
+		if self.verbose >= 2: print (xml)
+		newId = None
+		newVersion = None
+
+		if self.exe:
+			r = requests.post(self.baseurl+"/0.6/changeset/"+str(cid)+"/upload", data=xml.encode('utf-8'), 
+				auth=HTTPBasicAuth(self.user, self.passw),
+				headers=self.xmlHeaders)
+
+			if self.verbose >= 1: print (r.content)
+			if r.status_code != 200: return None
+
+			respRoot = ET.fromstring(r.content)
+
+	def DeleteNode(self, cid, objId, existingVersion):
+
+		self.DeleteObject(cid, 'node', objId, existingVersion)
+
 	def CreateWay(self, cid, nodeIds, tags):
 
 		xml = u"<?xml version='1.0' encoding='UTF-8'?>\n"
@@ -161,28 +195,9 @@ class OsmMod(object):
 
 		return int(newId), int(newVersion)
 
-	def DeleteWay(self, cid, wid, existingVersion):
+	def DeleteWay(self, cid, objId, existingVersion):
 
-		xml = u"<?xml version='1.0' encoding='UTF-8'?>\n"
-		xml += u'<osmChange version="0.6" generator="py">\n<delete>\n<way id="{0}" changeset="{1}" version="{2}">\n'.format(wid, cid, existingVersion)
-		xml += u'</way>\n</delete>\n</osmChange>\n'
-		if self.verbose >= 2: print (xml)
-		newId = None
-		newVersion = None
-
-		if self.exe:
-			r = requests.post(self.baseurl+"/0.6/changeset/"+str(cid)+"/upload", data=xml.encode('utf-8'), 
-				auth=HTTPBasicAuth(self.user, self.passw),
-				headers=self.xmlHeaders)
-
-			if self.verbose >= 1: print (r.content)
-			if r.status_code != 200: return None
-
-			respRoot = ET.fromstring(r.content)
-			for obj in respRoot:
-				newVersion = obj.attrib['new_version']
-
-		return int(newVersion)
+		self.DeleteObject(cid, 'way', objId, existingVersion)
 
 	def CreateRelation(self, cid, members, tags):
 
@@ -212,6 +227,10 @@ class OsmMod(object):
 				newVersion = obj.attrib['new_version']
 
 		return int(newId), int(newVersion)
+
+	def DeleteRelation(self, cid, objId, existingVersion):
+
+		self.DeleteObject(cid, 'relation', objId, existingVersion)
 	
 	def GetFullObject(self, objType, objId):
 		if objType not in ['way', 'relation']:
@@ -220,21 +239,7 @@ class OsmMod(object):
 		r = requests.get("{}/0.6/{}/{}/full".format(self.baseurl, objType, int(objId)))
 
 		if self.verbose >= 1: print (r.content)
-		if r.status_code != 200: return None
-
-		root = ET.fromstring(r.content)
-		nodes, ways, relations = osm.ParseOsmToObjs(root)
-
-		return nodes, ways, relations
-
-	def GetFullObject(self, objType, objId):
-		if objType not in ['way', 'relation']:
-			raise TypeError('Wrong type specified')
-		
-		r = requests.get("{}/0.6/{}/{}/full".format(self.baseurl, objType, int(objId)))
-
-		if self.verbose >= 1: print (r.content)
-		if r.status_code != 200: return None
+		if r.status_code != 200: raise ApiError("Server did not return success status", status_code=r.status_code)
 
 		root = ET.fromstring(r.content)
 		nodes, ways, relations = osm.ParseOsmToObjs(root)
@@ -312,13 +317,21 @@ if __name__=="__main__":
 	relRet = osmMod.CreateRelation(cid, members, {'eggs': 'spam'})
 	print (relRet)
 
-	osmMod.CloseChangeSet(cid)
-	print ("Closed changeset", cid)
-
 	nodes, ways, relations = osmMod.GetFullObject('way', wayRet[0])
 	print (nodes, ways, relations)
 
 	relations2 = osmMod.GetObjectRelations('way', wayRet[0])
 	print (relations2)
 	assert len(relations2) == 1
+
+	osmMod.DeleteRelation(cid, relRet[0], relRet[1])
+
+	osmMod.DeleteWay(cid, wayRet2[0], wayRet2[1])
+
+	print ("Get parent relations of non-existent way")
+	relations3 = osmMod.GetObjectRelations('way', wayRet[0])
+	print (relations3)
+
+	osmMod.CloseChangeSet(cid)
+	print ("Closed changeset", cid)
 
