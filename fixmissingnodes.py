@@ -36,10 +36,30 @@ def CloseChangeset(osm, cid):
 		osmMod.CloseChangeSet(cid[0])
 		print ("Closed changeset", cid[0])
 
+def RemoveWayFromRelation(wid, parentRelationId, osmMod, cid=[0]):
+
+	nodes, ways, relations = osmMod.GetObject('relation', parentRelationId)
+	rel = relations[parentRelationId]
+	relMemObjs, relTags, relAttribs = rel
+	wid = int(wid)
+	
+	filteredRelMemObjs = []
+	for mem in relMemObjs:
+		if mem['type'] == 'way' and int(mem['ref']) == wid:
+			continue
+		filteredRelMemObjs.append(mem)
+
+	if len(relMemObjs) == len(filteredRelMemObjs):
+		return False #No need to make changes.
+
+	CheckAndOpenChangeset(osmMod, cid)
+
+	osmMod.ModifyRelation(cid[0], filteredRelMemObjs, relTags, parentRelationId, int(relAttribs['version']))
+
 def FixWay(way, nodes, osmMod, cid=[0]):
 
 	nodeMapping = {}
-	wayId = way[2]['id']
+	wayId = int(way[2]['id'])
 
 	#Create replacement nodes
 	for nodeId in way[0]:
@@ -74,18 +94,19 @@ def FixWay(way, nodes, osmMod, cid=[0]):
 		if len(way[0]) >= 2:
 			CheckAndOpenChangeset(osmMod, cid)
 			print ("Uploading fixed way")
-			osmMod.ModifiedWay(cid[0], way[0], way[1], wayId, way[2]['version'])
+			osmMod.ModifyWay(cid[0], way[0], way[1], wayId, way[2]['version'])
 		else:
 			# Check if invalid way is member of a relation
 			parentRels = osmMod.GetObjectRelations('way', wayId)
-			if len(parentRels) == 0:
-
-				CheckAndOpenChangeset(osmMod, cid)
-				print ("Deleting way with insufficient nodes")
-				osmMod.DeleteWay(cid[0], wayId, way[2]['version'])
-
-			else:
+			if len(parentRels) > 0:
 				print ("Invalid way {} found as part of relation(s) {}".format(wayId, parentRels.keys()))
+				for relId in parentRels.keys():
+					RemoveWayFromRelation(wayId, relId, osmMod, cid)
+
+			CheckAndOpenChangeset(osmMod, cid)
+			print ("Deleting way with insufficient nodes")
+			osmMod.DeleteWay(cid[0], wayId, way[2]['version'])
+
 
 def CheckAndFixWaysParsed(nodes, ways, osmMod, cid=[0]):
 
@@ -99,7 +120,7 @@ def CheckAndFixWay(wayId, osmMod, cid=[0]):
 	print ("Checking way",wayId)
 
 	try:
-		nodes, ways, relations = osmMod.GetFullObject('way', wayId)
+		nodes, ways, relations = osmMod.GetObject('way', wayId, full=True)
 	except osmmod.ApiError as err:
 		print (err)
 		return False
@@ -110,15 +131,11 @@ def CheckAndFixWay(wayId, osmMod, cid=[0]):
 
 def CheckAndFixWaysInRelation(relationId, osmMod, cid=[0]):
 
-	print ("Checking relation",relationId)
-	r = requests.get(osmMod.baseurl+"/0.6/relation/"+str(relationId)+"/full")
-
 	try:
-		root = ET.fromstring(f.content)
-	except ET.ParseError:
-		print ("Error: Invalid XML")
-		return 0
-	nodes, ways, relations = osm.ParseOsmToObjs(root)
+		nodes, ways, relations = osmMod.GetObject('relation', relationId, full=True)
+	except osmmod.ApiError as err:
+		print (err)
+		return False
 
 	CheckAndFixWaysParsed(nodes, ways, osmMod, cid)
 	return 1

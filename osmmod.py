@@ -167,7 +167,7 @@ class OsmMod(object):
 
 		return int(newId), int(newVersion)
 
-	def ModifiedWay(self, cid, nodeIds, tags, wid, existingVersion):
+	def ModifyWay(self, cid, nodeIds, tags, wid, existingVersion):
 
 		xml = u"<?xml version='1.0' encoding='UTF-8'?>\n"
 		xml += u'<osmChange version="0.6" generator="py">\n<modify>\n<way id="{0}" changeset="{1}" version="{2}">\n'.format(wid, cid, existingVersion)
@@ -228,15 +228,47 @@ class OsmMod(object):
 
 		return int(newId), int(newVersion)
 
+	def ModifyRelation(self, cid, members, tags, rid, existingVersion):
+
+		xml = u"<?xml version='1.0' encoding='UTF-8'?>\n"
+		xml += u'<osmChange version="0.6" generator="py">\n<modify>\n<relation id="{0}" changeset="{1}" version="{2}">\n'.format(rid, cid, existingVersion)
+		for mem in members:
+			xml += u'<member type="{}" role="{}" ref="{}"/>\n'.format(mem['type'], saxutils.escape(mem['role']), int(mem['ref']))
+		for k in tags:
+			xml += u'<tag k="{0}" v="{1}"/>\n'.format(saxutils.escape(k), saxutils.escape(tags[k]))
+		xml += u'</relation>\n</modify>\n</osmChange>\n'
+		if self.verbose >= 2: print (xml)
+		newId = None
+		newVersion = None
+
+		if self.exe:
+			r = requests.post(self.baseurl+"/0.6/changeset/"+str(cid)+"/upload", data=xml.encode('utf-8'), 
+				auth=HTTPBasicAuth(self.user, self.passw),
+				headers=self.xmlHeaders)
+
+			if self.verbose >= 1: print (r.content)
+			if r.status_code != 200: return None
+
+			respRoot = ET.fromstring(r.content)
+			for obj in respRoot:
+				newId = obj.attrib['new_id']
+				newVersion = obj.attrib['new_version']
+
+		return int(newId), int(newVersion)
+
 	def DeleteRelation(self, cid, objId, existingVersion):
 
 		self.DeleteObject(cid, 'relation', objId, existingVersion)
 	
-	def GetFullObject(self, objType, objId):
-		if objType not in ['way', 'relation']:
+	def GetObject(self, objType, objId, full=False):
+		if full and objType not in ['way', 'relation']:
 			raise TypeError('Wrong type specified')
-		
-		r = requests.get("{}/0.6/{}/{}/full".format(self.baseurl, objType, int(objId)))
+
+		suffex = ''
+		if full:
+			suffex = '/full'
+
+		r = requests.get("{}/0.6/{}/{}{}".format(self.baseurl, objType, int(objId), suffex))
 
 		if self.verbose >= 1: print (r.content)
 		if r.status_code != 200: raise ApiError("Server did not return success status", status_code=r.status_code)
@@ -307,17 +339,20 @@ if __name__=="__main__":
 	wayRet = osmMod.CreateWay(cid, [ndId, ndId2], {'testk':'val1'})
 	print (wayRet)
 
-	wayRet2 = osmMod.ModifiedWay(cid, [ndId, ndId2], {'testk':'val2'}, wayRet[0], wayRet[1])
+	wayRet2 = osmMod.ModifyWay(cid, [ndId, ndId2], {'testk':'val2'}, wayRet[0], wayRet[1])
 	print (wayRet2)
 
-	members = [('node', ndId, 'foo'), ('way', wayRet[0], 'bar')]
+	members = [{'type':'node', 'ref':ndId, 'role':'foo'}, {'type':'way', 'ref':wayRet[0], 'role':'bar'}]
 	print ('node', ndId, 'foo')
 	print ('way', wayRet[0], 'bar')
 	print (members)
 	relRet = osmMod.CreateRelation(cid, members, {'eggs': 'spam'})
 	print (relRet)
 
-	nodes, ways, relations = osmMod.GetFullObject('way', wayRet[0])
+	relRet = osmMod.ModifyRelation(cid, members, {'eggs': 'bacon'}, relRet[0], relRet[1])
+	print (relRet)
+
+	nodes, ways, relations = osmMod.GetObject('way', wayRet[0], full=True)
 	print (nodes, ways, relations)
 
 	relations2 = osmMod.GetObjectRelations('way', wayRet[0])
