@@ -129,7 +129,7 @@ def CheckAndFixWay(wayId, osmMod, cid=[0]):
 
 	return True
 
-def CheckAndFixWaysInRelation(relationId, osmMod, cid=[0]):
+def CheckAndFixMemsInRelation(relationId, osmMod, cid=[0]):
 
 	try:
 		nodes, ways, relations = osmMod.GetObject('relation', relationId, full=True)
@@ -137,7 +137,36 @@ def CheckAndFixWaysInRelation(relationId, osmMod, cid=[0]):
 		print (err)
 		return False
 
-	CheckAndFixWaysParsed(nodes, ways, osmMod, cid)
+	memObjs, tags, attribs = relations[relationId]
+	
+	filtMemObjs = []
+	for memObj in memObjs:
+		memRef = int(memObj['ref'])
+		memType = memObj['type']
+		exists = False
+		if memType == 'node':
+			exists = memRef in nodes
+			print (memObj, exists)
+		elif memType == 'way':
+			exists = memRef in ways
+			print (memObj, exists)
+		elif memType == 'relation':
+			exists = memRef in relations
+			print (memObj, exists)	
+		if exists:
+			filtMemObjs.append(memObj)
+
+	if len(filtMemObjs) != len(memObjs):
+		print ("Fixing relation", relationId)
+		if cid[0] == 0:
+			cidRet = osmMod.CreateChangeSet({'comment':"Fix missing members in relation (bot)"})
+			cid[0] = cidRet[0]
+	
+		if len(filtMemObjs) > 0:
+			osmMod.ModifyRelation(cid[0], filtMemObjs, tags, relationId, int(attribs['version']))
+		else:
+			osmMod.DeleteRelation(cid[0], relationId, int(attribs['version']))
+
 	return 1
 
 def CheckFile(fiHandle, osmMod, cid=[0]):

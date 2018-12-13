@@ -60,15 +60,30 @@ if __name__=="__main__":
 
 	cid=[0]
 	osmMod = osmmod.OsmMod(server, username, password)
+	osmMod.verbose = 0
 
 	fi = open(args.input[0], "rt")
 	doneWays = set()
+	doneRels = set()
+
 	for li in fi.readlines():
-		nid, wid = parse('Node {} does not exist, but referenced by way: {}', li.strip())
-		if wid in doneWays:
-			continue
+		chk = parse('Node {} does not exist, but referenced by way: {}', li.strip())
+		if chk is not None:
+			nid, wid = chk
+			if wid in doneWays:
+				continue
 
-		fixmissingnodes.CheckAndFixWay(wid, osmMod)
+			fixmissingnodes.CheckAndFixWay(int(wid), osmMod)
 
-		doneWays.add(wid)
+			doneWays.add(wid)
+
+		chk = parse('{} {} does not exist, but referenced by relation: {}', li.strip())
+		if chk is not None:
+			objType, objId, rid = chk
+			if rid in doneRels:
+				continue
+
+			fixmissingnodes.CheckAndFixMemsInRelation(int(rid), osmMod)
+
+			doneRels.add(rid)
 
