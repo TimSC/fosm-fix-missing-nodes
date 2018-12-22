@@ -54,7 +54,8 @@ def RemoveWayFromRelation(wid, parentRelationId, osmMod, cid=[0]):
 
 	CheckAndOpenChangeset(osmMod, cid)
 
-	osmMod.ModifyRelation(cid[0], filteredRelMemObjs, relTags, parentRelationId, int(relAttribs['version']))
+	ret = osmMod.ModifyRelation(cid[0], filteredRelMemObjs, relTags, parentRelationId, int(relAttribs['version']))
+	print (ret)
 
 def DeleteWayAndRemoveFromParents(wayId, wayVer, osmMod, cid=[0]):
 	# Check if invalid way is member of a relation
@@ -137,6 +138,17 @@ def CheckAndFixWay(wayId, osmMod, cid=[0]):
 		return False
 
 	CheckAndFixWaysParsed(nodes, ways, osmMod, cid)
+
+	return True
+
+def CheckWayTooFewNodes(wayIds, osmMod, cid=[0]):
+
+	nodes, ways, relations = osmMod.GetObjects('way', wayIds)
+	print (len(ways))
+	for wayId in ways:
+		nids = ways[wayId][0]
+		if len(nids) < 2:
+			CheckAndFixWay(wayId, osmMod, cid)
 
 	return True
 

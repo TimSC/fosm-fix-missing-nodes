@@ -32,7 +32,7 @@ class OsmMod(object):
 		u"<osm version='0.6' generator='py'>\n" +\
 		u"  <changeset>\n"
 		for k in tags:
-			createChangeset += u'<tag k="{0}" v="{1}"/>\n'.format(saxutils.escape(k), saxutils.escape(tags[k]))
+			createChangeset += u'<tag k={0} v={1}/>\n'.format(saxutils.quoteattr(k), saxutils.quoteattr(tags[k]))
 		createChangeset += u"  </changeset>\n" +\
 		u"</osm>\n"
 
@@ -69,7 +69,7 @@ class OsmMod(object):
 		xml = u"<?xml version='1.0' encoding='UTF-8'?>\n"
 		xml += u'<osmChange version="0.6" generator="py">\n<create>\n<node id="-1" lat="{0}" lon="{1}" changeset="{2}">\n'.format(lat, lon, cid)
 		for k in tags:
-			xml += u'<tag k="{0}" v="{1}"/>\n'.format(saxutils.scape(k), saxutils.escape(tags[k]))
+			xml += u'<tag k={0} v={1}/>\n'.format(saxutils.quoteattr(k), saxutils.quoteattr(tags[k]))
 		xml += u'</node>\n</create>\n</osmChange>\n'
 		if self.verbose >= 2: print (xml)
 		newId = None
@@ -95,7 +95,7 @@ class OsmMod(object):
 		xml = u"<?xml version='1.0' encoding='UTF-8'?>\n"
 		xml += u'<osmChange version="0.6" generator="py">\n<modify>\n<node id="{4}" lat="{0}" lon="{1}" changeset="{2}" version="{3}">\n'.format(lat, lon, cid, existingVersion, nid)
 		for k in tags:
-			xml += u'<tag k="{0}" v="{1}"/>\n'.format(saxutils.escape(k), saxutils.escape(tags[k]))
+			xml += u'<tag k={0} v={1}/>\n'.format(saxutils.quoteattr(k), saxutils.quoteattr(tags[k]))
 		xml += u'</node>\n</modify>\n</osmChange>\n'
 		if self.verbose >= 2: print (xml)
 		newVersion = None
@@ -146,7 +146,7 @@ class OsmMod(object):
 		for nid in nodeIds:
 			xml += u'<nd ref="{0}"/>\n'.format(nid)
 		for k in tags:
-			xml += u'<tag k="{0}" v="{1}"/>\n'.format(saxutils.escape(k), saxutils.escape(tags[k]))
+			xml += u'<tag k={0} v={1}/>\n'.format(saxutils.quoteattr(k), saxutils.quoteattr(tags[k]))
 		xml += u'</way>\n</create>\n</osmChange>\n'
 		if self.verbose >= 2: print (xml)
 		newId = None
@@ -174,7 +174,7 @@ class OsmMod(object):
 		for nid in nodeIds:
 			xml += u'<nd ref="{0}"/>\n'.format(nid)
 		for k in tags:
-			xml += u'<tag k="{0}" v="{1}"/>\n'.format(saxutils.escape(k), saxutils.escape(tags[k]))
+			xml += u'<tag k={0} v={1}/>\n'.format(saxutils.quoteattr(k), saxutils.quoteattr(tags[k]))
 		xml += u'</way>\n</modify>\n</osmChange>\n'
 		if self.verbose >= 2: print (xml)
 		newId = None
@@ -206,7 +206,7 @@ class OsmMod(object):
 		for memType, memId, memRole in members:
 			xml += u'<member type="{}" role="{}" ref="{}"/>\n'.format(memType, saxutils.escape(memRole), int(memId))
 		for k in tags:
-			xml += u'<tag k="{0}" v="{1}"/>\n'.format(saxutils.escape(k), saxutils.escape(tags[k]))
+			xml += u'<tag k={0} v={1}/>\n'.format(saxutils.quoteattr(k), saxutils.quoteattr(tags[k]))
 		xml += u'</relation>\n</create>\n</osmChange>\n'
 
 		if self.verbose >= 2: print (xml)
@@ -233,9 +233,9 @@ class OsmMod(object):
 		xml = u"<?xml version='1.0' encoding='UTF-8'?>\n"
 		xml += u'<osmChange version="0.6" generator="py">\n<modify>\n<relation id="{0}" changeset="{1}" version="{2}">\n'.format(rid, cid, existingVersion)
 		for mem in members:
-			xml += u'<member type="{}" role="{}" ref="{}"/>\n'.format(mem['type'], saxutils.escape(mem['role']), int(mem['ref']))
+			xml += u'<member type="{}" role={} ref="{}"/>\n'.format(mem['type'], saxutils.quoteattr(mem['role']), int(mem['ref']))
 		for k in tags:
-			xml += u'<tag k="{0}" v="{1}"/>\n'.format(saxutils.escape(k), saxutils.escape(tags[k]))
+			xml += u'<tag k={0} v={1}/>\n'.format(saxutils.quoteattr(k), saxutils.quoteattr(tags[k]))
 		xml += u'</relation>\n</modify>\n</osmChange>\n'
 		if self.verbose >= 2: print (xml)
 		newId = None
@@ -269,6 +269,18 @@ class OsmMod(object):
 			suffex = '/full'
 
 		r = requests.get("{}/0.6/{}/{}{}".format(self.baseurl, objType, int(objId), suffex))
+
+		if self.verbose >= 1: print (r.content)
+		if r.status_code != 200: raise ApiError("Server did not return success status", status_code=r.status_code)
+
+		root = ET.fromstring(r.content)
+		nodes, ways, relations = osm.ParseOsmToObjs(root)
+
+		return nodes, ways, relations
+
+	def GetObjects(self, objType, objIds):
+
+		r = requests.get("{0}/0.6/{1}s?{1}s={2}".format(self.baseurl, objType, u','.join(map(str, objIds))))
 
 		if self.verbose >= 1: print (r.content)
 		if r.status_code != 200: raise ApiError("Server did not return success status", status_code=r.status_code)
