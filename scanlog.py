@@ -69,7 +69,7 @@ if __name__=="__main__":
 	for li in fi.readlines():
 		chk = parse('Node {} does not exist, but referenced by way: {}', li.strip())
 		if chk is not None:
-			nid, wid = chk
+			nid, wid = int(chk[0]), int(chk[1])
 			if wid in doneWays:
 				continue
 
@@ -77,13 +77,23 @@ if __name__=="__main__":
 
 			doneWays.add(wid)
 
+		chk = parse('Too few nodes in way: {}', li.strip())
+		if chk is not None:
+			wid = int(chk[0])
+			if wid in doneWays:
+				continue
+
+			fixmissingnodes.CheckAndFixWay(wid, osmMod)
+
+			doneWays.add(wid)
+
 		chk = parse('{} {} does not exist, but referenced by relation: {}', li.strip())
 		if chk is not None:
-			objType, objId, rid = chk
+			objType, objId, rid = int(chk[0]), int(chk[1]), int(chk[2])
 			if rid in doneRels:
 				continue
 
-			fixmissingnodes.CheckAndFixMemsInRelation(int(rid), osmMod)
+			fixmissingnodes.CheckAndFixMemsInRelation(rid, osmMod)
 
 			doneRels.add(rid)
 

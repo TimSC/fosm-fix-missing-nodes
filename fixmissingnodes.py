@@ -56,10 +56,26 @@ def RemoveWayFromRelation(wid, parentRelationId, osmMod, cid=[0]):
 
 	osmMod.ModifyRelation(cid[0], filteredRelMemObjs, relTags, parentRelationId, int(relAttribs['version']))
 
+def DeleteWayAndRemoveFromParents(wayId, wayVer, osmMod, cid=[0]):
+	# Check if invalid way is member of a relation
+	parentRels = osmMod.GetObjectRelations('way', wayId)
+	if len(parentRels) > 0:
+		print ("Invalid way {} found as part of relation(s) {}".format(wayId, parentRels.keys()))
+		for relId in parentRels.keys():
+			RemoveWayFromRelation(wayId, relId, osmMod, cid)
+
+	CheckAndOpenChangeset(osmMod, cid)
+	print ("Deleting way with insufficient nodes")
+	osmMod.DeleteWay(cid[0], wayId, wayVer)
+
 def FixWay(way, nodes, osmMod, cid=[0]):
 
 	nodeMapping = {}
 	wayId = int(way[2]['id'])
+
+	if len(way[0]) < 2:
+		DeleteWayAndRemoveFromParents(wayId, way[2]['version'], osmMod, cid)
+		return
 
 	#Create replacement nodes
 	for nodeId in way[0]:
@@ -78,6 +94,7 @@ def FixWay(way, nodes, osmMod, cid=[0]):
 			else:
 				nodeMapping[nodeId] = None
 
+	wayFixPlanned = False
 	if len(nodeMapping) > 0:
 
 		#Update way with replacements
@@ -89,30 +106,24 @@ def FixWay(way, nodes, osmMod, cid=[0]):
 			else:
 				filteredNds.append(nodeId)
 		way[0] = filteredNds
+		wayFixPlanned = True
 
-		#Upload new way
-		if len(way[0]) >= 2:
-			CheckAndOpenChangeset(osmMod, cid)
-			print ("Uploading fixed way")
-			osmMod.ModifyWay(cid[0], way[0], way[1], wayId, way[2]['version'])
-		else:
-			# Check if invalid way is member of a relation
-			parentRels = osmMod.GetObjectRelations('way', wayId)
-			if len(parentRels) > 0:
-				print ("Invalid way {} found as part of relation(s) {}".format(wayId, parentRels.keys()))
-				for relId in parentRels.keys():
-					RemoveWayFromRelation(wayId, relId, osmMod, cid)
+	#Upload new way
+	if len(way[0]) >= 2 and wayFixPlanned:
+		CheckAndOpenChangeset(osmMod, cid)
+		print ("Uploading fixed way")
+		osmMod.ModifyWay(cid[0], way[0], way[1], wayId, way[2]['version'])
+		return
 
-			CheckAndOpenChangeset(osmMod, cid)
-			print ("Deleting way with insufficient nodes")
-			osmMod.DeleteWay(cid[0], wayId, way[2]['version'])
-
+	if len(way[0]) < 2:
+		DeleteWayAndRemoveFromParents(wayId, way[2]['version'], osmMod, cid)
+		return
 
 def CheckAndFixWaysParsed(nodes, ways, osmMod, cid=[0]):
 
 	for wayId in ways:
-		if not WayIsComplete(ways[wayId], nodes):
-			print (wayId,"is incomplete")
+		if not WayIsComplete(ways[wayId], nodes) or len(nodes) < 2:
+			print (wayId,"is incomplete or too few nodes")
 			FixWay(ways[wayId], nodes, osmMod, cid)
 
 def CheckAndFixWay(wayId, osmMod, cid=[0]):
