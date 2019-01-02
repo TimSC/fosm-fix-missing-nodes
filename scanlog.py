@@ -66,6 +66,7 @@ if __name__=="__main__":
 	doneWays = set()
 	doneRels = set()
 	waysTooFewNodes = set()
+	relationsTooFewMembers = set();
 
 	for li in fi.readlines():
 		chk = parse('Node {} does not exist, but referenced by way: {}', li.strip())
@@ -92,6 +93,20 @@ if __name__=="__main__":
 			doneWays.update(waysTooFewNodes)
 			waysTooFewNodes = set()
 
+		chk = parse('Too few members in relation: {}', li.strip())
+		if chk is not None:
+			rid = int(chk[0])
+			if rid in doneRels:
+				continue
+			relationsTooFewMembers.add(rid)
+
+		if len(relationsTooFewMembers) >= 100:
+
+			fixmissingnodes.CheckRelationTooFewMembers(relationsTooFewMembers, osmMod, cid)
+
+			doneRels.update(relationsTooFewMembers)
+			relationsTooFewMembers = set()
+
 		chk = parse('{} {} does not exist, but referenced by relation: {}', li.strip())
 		if chk is not None:
 			objType, objId, rid = int(chk[0]), int(chk[1]), int(chk[2])
@@ -101,4 +116,20 @@ if __name__=="__main__":
 			fixmissingnodes.CheckAndFixMemsInRelation(rid, osmMod, cid)
 
 			doneRels.add(rid)
+
+	#Clear buffers
+	if len(waysTooFewNodes) > 0:
+
+		fixmissingnodes.CheckWayTooFewNodes(waysTooFewNodes, osmMod, cid)
+
+		doneWays.update(waysTooFewNodes)
+		waysTooFewNodes = set()
+
+	if len(relationsTooFewMembers) > 0:
+
+		fixmissingnodes.CheckRelationTooFewMembers(relationsTooFewMembers, osmMod, cid)
+
+		doneRels.update(relationsTooFewMembers)
+		relationsTooFewMembers = set()
+
 

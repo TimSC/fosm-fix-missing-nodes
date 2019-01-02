@@ -36,16 +36,16 @@ def CloseChangeset(osm, cid):
 		osmMod.CloseChangeSet(cid[0])
 		print ("Closed changeset", cid[0])
 
-def RemoveWayFromRelation(wid, parentRelationId, osmMod, cid=[0]):
+def RemoveObjectFromRelation(objType, objId, parentRelationId, osmMod, cid=[0]):
 
 	nodes, ways, relations = osmMod.GetObject('relation', parentRelationId)
 	rel = relations[parentRelationId]
 	relMemObjs, relTags, relAttribs = rel
-	wid = int(wid)
+	objId = int(objId)
 	
 	filteredRelMemObjs = []
 	for mem in relMemObjs:
-		if mem['type'] == 'way' and int(mem['ref']) == wid:
+		if mem['type'] == objType and int(mem['ref']) == objId:
 			continue
 		filteredRelMemObjs.append(mem)
 
@@ -57,17 +57,17 @@ def RemoveWayFromRelation(wid, parentRelationId, osmMod, cid=[0]):
 	ret = osmMod.ModifyRelation(cid[0], filteredRelMemObjs, relTags, parentRelationId, int(relAttribs['version']))
 	print (ret)
 
-def DeleteWayAndRemoveFromParents(wayId, wayVer, osmMod, cid=[0]):
+def DeleteObjectAndRemoveFromParents(objType, objId, objVer, osmMod, cid=[0]):
 	# Check if invalid way is member of a relation
-	parentRels = osmMod.GetObjectRelations('way', wayId)
+	parentRels = osmMod.GetObjectRelations(objType, objId)
 	if len(parentRels) > 0:
-		print ("Invalid way {} found as part of relation(s) {}".format(wayId, parentRels.keys()))
+		print ("Invalid {} {} found as part of relation(s) {}".format(objType, objId, parentRels.keys()))
 		for relId in parentRels.keys():
-			RemoveWayFromRelation(wayId, relId, osmMod, cid)
+			RemoveObjectFromRelation(objType, objId, relId, osmMod, cid)
 
 	CheckAndOpenChangeset(osmMod, cid)
-	print ("Deleting way with insufficient nodes")
-	osmMod.DeleteWay(cid[0], wayId, wayVer)
+	print ("Deleting invalid {} {}".format(objType, objId))
+	osmMod.DeleteObject(cid[0], objType, objId, objVer)
 
 def FixWay(way, nodes, osmMod, cid=[0]):
 
@@ -75,7 +75,7 @@ def FixWay(way, nodes, osmMod, cid=[0]):
 	wayId = int(way[2]['id'])
 
 	if len(way[0]) < 2:
-		DeleteWayAndRemoveFromParents(wayId, way[2]['version'], osmMod, cid)
+		DeleteObjectAndRemoveFromParents('way', wayId, way[2]['version'], osmMod, cid)
 		return
 
 	#Create replacement nodes
@@ -117,7 +117,7 @@ def FixWay(way, nodes, osmMod, cid=[0]):
 		return
 
 	if len(way[0]) < 2:
-		DeleteWayAndRemoveFromParents(wayId, way[2]['version'], osmMod, cid)
+		DeleteObjectAndRemoveFromParents('way', wayId, way[2]['version'], osmMod, cid)
 		return
 
 def CheckAndFixWaysParsed(nodes, ways, osmMod, cid=[0]):
@@ -146,13 +146,29 @@ def CheckWayTooFewNodes(wayIds, osmMod, cid=[0]):
 	nodes, ways, relations = osmMod.GetObjects('way', wayIds)
 	print (len(ways))
 	for wayId in ways:
+		#TODO: check if visible?
+
 		nids = ways[wayId][0]
 		if len(nids) < 2:
 			CheckAndFixWay(wayId, osmMod, cid)
 
 	return True
 
-def CheckAndFixMemsInRelation(relationId, osmMod, cid=[0]):
+def CheckRelationTooFewMembers(relIds, osmMod, cid=[0]):
+
+	nodes, ways, relations = osmMod.GetObjects('relation', relIds)
+	print (len(ways))
+	for relId in relations:
+		#TODO: check if visible?
+
+		mems = relations[relId][0]
+		if len(mems) == 0:
+			#print ("Fixing relation {} with no members".format(relId))
+			CheckAndFixMemsInRelation(relId, osmMod, cid)
+
+	return True
+
+def CheckAndFixMemsInRelation(relationId, osmMod, cid=[0], deleteEmptyRelations=False):
 
 	try:
 		nodes, ways, relations = osmMod.GetObject('relation', relationId, full=True)
@@ -179,7 +195,7 @@ def CheckAndFixMemsInRelation(relationId, osmMod, cid=[0]):
 		if exists:
 			filtMemObjs.append(memObj)
 
-	if len(filtMemObjs) != len(memObjs):
+	if len(filtMemObjs) != len(memObjs) or (len(filtMemObjs) == 0 and deleteEmptyRelations):
 		print ("Fixing relation", relationId)
 		if cid[0] == 0:
 			cidRet = osmMod.CreateChangeSet({'comment':"Fix missing members in relation (bot)"})
@@ -187,8 +203,8 @@ def CheckAndFixMemsInRelation(relationId, osmMod, cid=[0]):
 	
 		if len(filtMemObjs) > 0:
 			osmMod.ModifyRelation(cid[0], filtMemObjs, tags, relationId, int(attribs['version']))
-		else:
-			osmMod.DeleteRelation(cid[0], relationId, int(attribs['version']))
+		elif deleteEmptyRelations:
+			DeleteObjectAndRemoveFromParents('relation', relationId, int(attribs['version']), osmMod, cid)
 
 	return 1
 
